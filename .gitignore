@@ -14,6 +14,8 @@
 !/.gitignore
 !/.env.example
 !/proyecto/
+# Portada del repositorio en GitHub (no reemplaza el README.md de la raíz)
+!/.github/
 
 # 2) Dentro de proyecto/, solo base de datos, API y frontend
 /proyecto/*
