@@ -1,0 +1,14 @@
+-- =====================================================================
+-- V007__permiso_revocar_roles.sql
+-- Fase API (08/10/2026): RF-001 "administrar usuarios, roles y permisos" exige
+-- poder QUITAR un rol a un usuario. V004 no otorga DELETE a app_incidentes en
+-- ninguna tabla, lo que hacía imposible revocar roles.
+--
+-- Excepción acotada al principio "sin DELETE" (decisiones §23, RN-07):
+--   * usuario_rol es configuración de acceso, no un registro del ciclo de vida
+--     del incidente (RN-07 protege incidentes, historial y auditoría);
+--   * cada revocación queda en la bitácora `auditoria` (operación ACTUALIZAR_USUARIO),
+--     en la misma transacción.
+-- Las tablas de incidentes, historial y auditoría siguen SIN DELETE (prueba P-12).
+-- =====================================================================
+GRANT DELETE ON usuario_rol TO app_incidentes;

@@ -1,0 +1,595 @@
+openapi: 3.1.0
+info:
+  title: CiberApp — API de Gestión de Incidentes de Ciberseguridad
+  version: 1.0.0
+  description: |
+    API REST JSON del Sistema Web de Gestión y Seguimiento de Incidentes de Ciberseguridad.
+
+    **Autenticación:** `POST /auth/login` emite una cookie `sesion` (httpOnly, SameSite=Strict, 30 min, deslizante).
+    **Autorización:** por rol en el servidor (RN-08). Roles: administrador, gestor, analista, consultor.
+    **Concurrencia:** las escrituras sobre un incidente exigen `version` (control optimista); si otro usuario lo
+    modificó antes se responde `409 VERSION_DESACTUALIZADA`.
+    **Errores:** formato único `{ "error": { "codigo", "mensaje", "detalles?" } }`; decidir por `codigo`.
+
+    Trazabilidad: cada operación indica los RF/RN que cubre.
+servers:
+  - url: '{base}/api/v1'
+    variables:
+      base:
+        default: http://localhost:3000
+tags:
+  - name: Salud
+  - name: Autenticación
+  - name: Catálogos
+  - name: Incidentes
+  - name: Seguimiento
+  - name: Evidencias
+  - name: Usuarios
+  - name: Reportes y auditoría
+security:
+  - cookieSesion: []
+
+paths:
+  /salud:
+    get:
+      tags: [Salud]
+      summary: Estado de la API y de la base de datos
+      security: []
+      responses:
+        '200': { description: Operativa }
+        '503': { description: Base de datos sin conexión }
+
+  /auth/login:
+    post:
+      tags: [Autenticación]
+      summary: Iniciar sesión (RF-001, RNF-001)
+      description: Límite de 10 intentos por IP cada 15 min. Los intentos fallidos se auditan.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Login' }
+            example: { usuario: gestor, contrasena: '********' }
+      responses:
+        '200':
+          description: Sesión iniciada; se emite la cookie `sesion`
+          headers:
+            Set-Cookie: { schema: { type: string }, description: 'sesion=<jwt>; HttpOnly; SameSite=Strict; Path=/api' }
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { $ref: '#/components/schemas/UsuarioSesion' } } }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '422': { $ref: '#/components/responses/Validacion' }
+        '429': { description: Demasiados intentos }
+  /auth/logout:
+    post:
+      tags: [Autenticación]
+      summary: Cerrar sesión
+      responses:
+        '204': { description: Sesión cerrada }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+  /auth/me:
+    get:
+      tags: [Autenticación]
+      summary: Usuario de la sesión actual, con roles y permisos efectivos
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { $ref: '#/components/schemas/UsuarioSesion' } } }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+
+  /catalogos:
+    get:
+      tags: [Catálogos]
+      summary: Catálogos activos y máquina de estados (RF-020, RF-021, RF-031)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      categorias: { type: array, items: { $ref: '#/components/schemas/Catalogo' } }
+                      tipos: { type: array, items: { allOf: [{ $ref: '#/components/schemas/Catalogo' }, { type: object, properties: { categoria_id: { type: integer } } }] } }
+                      severidades: { type: array, items: { $ref: '#/components/schemas/Catalogo' } }
+                      prioridades: { type: array, items: { $ref: '#/components/schemas/Catalogo' } }
+                      estados: { type: array, items: { $ref: '#/components/schemas/Catalogo' } }
+                      transiciones:
+                        type: object
+                        additionalProperties: { type: array, items: { type: string } }
+                        example: { registrado: [asignado], asignado: [en investigación], en investigación: [resuelto], resuelto: [cerrado], cerrado: [en investigación] }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+
+  /incidentes:
+    get:
+      tags: [Incidentes]
+      summary: Buscar y filtrar incidentes (RF-041)
+      description: El rol analista solo recibe los incidentes de los que es responsable vigente (RN-08).
+      parameters:
+        - { name: estado, in: query, schema: { type: integer } }
+        - { name: severidad, in: query, schema: { type: integer } }
+        - { name: prioridad, in: query, schema: { type: integer } }
+        - { name: categoria, in: query, schema: { type: integer } }
+        - { name: tipo, in: query, schema: { type: integer } }
+        - { name: responsable, in: query, schema: { type: integer }, description: Id de usuario (ignorado para analistas) }
+        - { name: desde, in: query, schema: { type: string, format: date } }
+        - { name: hasta, in: query, schema: { type: string, format: date } }
+        - { name: q, in: query, schema: { type: string, maxLength: 100 }, description: Texto en código, título o sistema afectado }
+        - { $ref: '#/components/parameters/Pagina' }
+        - { $ref: '#/components/parameters/PorPagina' }
+      responses:
+        '200':
+          description: Página de resultados ordenada por fecha de registro descendente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/IncidenteResumen' } }
+                  meta: { $ref: '#/components/schemas/Paginacion' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/Prohibido' }
+        '422': { $ref: '#/components/responses/Validacion' }
+    post:
+      tags: [Incidentes]
+      summary: Registrar incidente (RF-010, RF-011, RF-020, RF-021, RN-01, RN-04)
+      description: |
+        Roles: administrador, gestor. Crea el incidente en estado `registrado` con responsable obligatorio,
+        primera entrada de historial y registro de auditoría en una sola transacción.
+        Severidad `crítica` exige prioridad `alta` (RN-04). El tipo debe pertenecer a la categoría.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/IncidenteNuevo' }
+      responses:
+        '201':
+          description: Creado
+          headers: { Location: { schema: { type: string } } }
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { $ref: '#/components/schemas/IncidenteDetalle' } } }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/Prohibido' }
+        '422': { $ref: '#/components/responses/ReglaNegocio' }
+
+  /incidentes/{id}:
+    parameters: [{ $ref: '#/components/parameters/IdIncidente' }]
+    get:
+      tags: [Incidentes]
+      summary: Detalle e historial del incidente (RF-040)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { $ref: '#/components/schemas/IncidenteDetalle' } } }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+    patch:
+      tags: [Incidentes]
+      summary: Modificar datos y clasificación (RF-011, RF-020, RF-021, RN-07, RN-10)
+      description: Roles administrador, gestor. No cambia el estado. Prohibido si el incidente está cerrado (409).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/IncidenteCambios' }
+      responses:
+        '200': { $ref: '#/components/responses/Detalle' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/Conflicto' }
+        '422': { $ref: '#/components/responses/ReglaNegocio' }
+
+  /incidentes/{id}/estado:
+    parameters: [{ $ref: '#/components/parameters/IdIncidente' }]
+    post:
+      tags: [Seguimiento]
+      summary: Cambiar de estado (RF-031, RF-050, RN-02, RN-06, RN-10)
+      description: |
+        Transiciones: registrado→asignado→en investigación→resuelto→cerrado; cerrado→en investigación (reapertura).
+        Avanzar: administrador, gestor o analista responsable. Cerrar y reabrir: administrador, gestor.
+        Cerrar exige ≥ 1 acción registrada (RN-06). Reabrir exige `justificacion`, que se guarda como acción (RN-10).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CambioEstado' }
+            examples:
+              avanzar: { value: { version: '1791234567123456', estado: en investigación, observacion: Inicia análisis } }
+              reabrir: { value: { version: '1791234567123456', estado: en investigación, justificacion: Se detectó reinfección } }
+      responses:
+        '200': { $ref: '#/components/responses/Detalle' }
+        '403': { $ref: '#/components/responses/Prohibido' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/Conflicto' }
+        '422': { $ref: '#/components/responses/ReglaNegocio' }
+
+  /incidentes/{id}/asignacion:
+    parameters: [{ $ref: '#/components/parameters/IdIncidente' }]
+    post:
+      tags: [Seguimiento]
+      summary: Asignar o reasignar responsable (RF-030, RN-04)
+      description: Roles administrador, gestor. Cierra la asignación vigente y abre otra (una sola vigente).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version, responsable_id]
+              properties:
+                version: { type: string }
+                responsable_id: { type: integer }
+                observacion: { type: [string, 'null'], maxLength: 1000 }
+      responses:
+        '200': { $ref: '#/components/responses/Detalle' }
+        '403': { $ref: '#/components/responses/Prohibido' }
+        '409': { $ref: '#/components/responses/Conflicto' }
+        '422': { $ref: '#/components/responses/ReglaNegocio' }
+
+  /incidentes/{id}/acciones:
+    parameters: [{ $ref: '#/components/parameters/IdIncidente' }]
+    post:
+      tags: [Seguimiento]
+      summary: Registrar acción (RF-032, RN-05)
+      description: Permitido también en incidentes cerrados (RN-10). Usuario y fecha los pone el servidor.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [descripcion]
+              properties:
+                descripcion: { type: string, maxLength: 2000, example: Aislamiento del equipo afectado de la red }
+                resultado: { type: [string, 'null'], maxLength: 2000, example: Equipo aislado; sin propagación }
+      responses:
+        '201': { $ref: '#/components/responses/Detalle' }
+        '403': { $ref: '#/components/responses/Prohibido' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+
+  /incidentes/{id}/comentarios:
+    parameters: [{ $ref: '#/components/parameters/IdIncidente' }]
+    post:
+      tags: [Seguimiento]
+      summary: Agregar comentario (RF-033)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [texto], properties: { texto: { type: string, maxLength: 2000 } } }
+      responses:
+        '201': { $ref: '#/components/responses/Detalle' }
+        '409': { $ref: '#/components/responses/Conflicto' }
+
+  /incidentes/{id}/evidencias:
+    parameters: [{ $ref: '#/components/parameters/IdIncidente' }]
+    post:
+      tags: [Evidencias]
+      summary: Adjuntar evidencia (RF-012, RNF-006)
+      description: |
+        Máximo 10 MB. Extensiones: .pdf .png .jpg .jpeg .txt .log .csv .json .pcap .zip.
+        El servidor calcula el SHA-256; en la BD se guardan metadatos + hash y el binario fuera de la BD.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [archivo]
+              properties:
+                archivo: { type: string, format: binary }
+      responses:
+        '201': { $ref: '#/components/responses/Detalle' }
+        '409': { $ref: '#/components/responses/Conflicto' }
+        '422': { $ref: '#/components/responses/ReglaNegocio' }
+
+  /incidentes/{id}/evidencias/{evidenciaId}/archivo:
+    parameters:
+      - { $ref: '#/components/parameters/IdIncidente' }
+      - { name: evidenciaId, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Evidencias]
+      summary: Descargar evidencia con verificación de integridad
+      responses:
+        '200':
+          description: Archivo
+          headers:
+            X-Integridad-Verificada: { schema: { type: string, enum: [si, 'no'] }, description: SHA-256 recalculado vs registrado }
+          content:
+            application/octet-stream: { schema: { type: string, format: binary } }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+
+  /usuarios:
+    get:
+      tags: [Usuarios]
+      summary: Listar usuarios (RF-001, RF-030)
+      description: Roles administrador y gestor (este último para elegir responsables).
+      parameters:
+        - { name: rol, in: query, schema: { type: string, enum: [administrador, gestor, analista, consultor] } }
+        - { name: activo, in: query, schema: { type: string, enum: ['true', 'false'] } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/Usuario' } } } }
+        '403': { $ref: '#/components/responses/Prohibido' }
+    post:
+      tags: [Usuarios]
+      summary: Crear usuario (RF-001, RNF-004)
+      description: Solo administrador. Contraseña ≥ 10 caracteres con letras y números; se guarda con bcrypt.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UsuarioNuevo' }
+      responses:
+        '201': { description: Creado }
+        '403': { $ref: '#/components/responses/Prohibido' }
+        '409': { $ref: '#/components/responses/Conflicto' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /usuarios/{id}:
+    patch:
+      tags: [Usuarios]
+      summary: Modificar, activar/desactivar o cambiar roles (RF-001)
+      description: Solo administrador. Inactivación lógica (sin borrado). Un administrador no puede bloquearse a sí mismo.
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nombre_completo: { type: string }
+                correo: { type: [string, 'null'], format: email }
+                activo: { type: boolean }
+                roles: { type: array, items: { type: string, enum: [administrador, gestor, analista, consultor] } }
+                contrasena: { type: string, minLength: 10 }
+      responses:
+        '200': { description: OK }
+        '403': { $ref: '#/components/responses/Prohibido' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/Conflicto' }
+
+  /reportes/resumen:
+    get:
+      tags: [Reportes y auditoría]
+      summary: Indicadores agregados para el tablero (RF-060, cobertura mínima)
+      description: Roles administrador, gestor, consultor.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      total: { type: integer }
+                      abiertos: { type: integer }
+                      criticos_abiertos: { type: integer }
+                      horas_promedio_resolucion: { type: [number, 'null'] }
+                      por_estado: { type: array, items: { $ref: '#/components/schemas/Conteo' } }
+                      por_severidad: { type: array, items: { $ref: '#/components/schemas/Conteo' } }
+                      por_categoria: { type: array, items: { $ref: '#/components/schemas/Conteo' } }
+                      registrados_ultimos_30_dias:
+                        type: array
+                        items: { type: object, properties: { fecha: { type: string, format: date }, total: { type: integer } } }
+        '403': { $ref: '#/components/responses/Prohibido' }
+  /auditoria:
+    get:
+      tags: [Reportes y auditoría]
+      summary: Consultar bitácora de operaciones (RF-070, RNF-040)
+      description: Solo administrador. Bitácora append-only.
+      parameters:
+        - { $ref: '#/components/parameters/Pagina' }
+        - { $ref: '#/components/parameters/PorPagina' }
+      responses:
+        '200': { description: OK }
+        '403': { $ref: '#/components/responses/Prohibido' }
+
+components:
+  securitySchemes:
+    cookieSesion:
+      type: apiKey
+      in: cookie
+      name: sesion
+  parameters:
+    IdIncidente: { name: id, in: path, required: true, schema: { type: integer, minimum: 1 } }
+    Pagina: { name: pagina, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+    PorPagina: { name: por_pagina, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+  responses:
+    Detalle:
+      description: Incidente actualizado
+      content:
+        application/json:
+          schema: { type: object, properties: { data: { $ref: '#/components/schemas/IncidenteDetalle' } } }
+    NoAutenticado:
+      description: Sin sesión o sesión expirada
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' }, example: { error: { codigo: NO_AUTENTICADO, mensaje: Sesión no válida o expirada } } } }
+    Prohibido:
+      description: El rol no permite la operación
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' }, example: { error: { codigo: PROHIBIDO, mensaje: Su rol no permite esta operación } } } }
+    NoEncontrado:
+      description: No existe o no es accesible para el usuario
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Conflicto:
+      description: 'Conflicto de estado: VERSION_DESACTUALIZADA, TRANSICION_INVALIDA, INCIDENTE_CERRADO, YA_ASIGNADO, DUPLICADO, AUTO_BLOQUEO'
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' }, example: { error: { codigo: TRANSICION_INVALIDA, mensaje: 'No se puede pasar de "registrado" a "cerrado". Permitido: asignado (RN-02)' } } } }
+    Validacion:
+      description: Datos inválidos
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    ReglaNegocio:
+      description: 'Validación o regla de negocio: VALIDACION, RN04_CRITICO_PRIORIDAD, RN06_SIN_ACCION, RN10_SIN_JUSTIFICACION, TIPO_NO_PERTENECE, RESPONSABLE_INVALIDO, EXTENSION_NO_PERMITIDA'
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' }, example: { error: { codigo: RN04_CRITICO_PRIORIDAD, mensaje: Un incidente de severidad crítica debe tener prioridad alta (RN-04) } } } }
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [codigo, mensaje]
+          properties:
+            codigo: { type: string }
+            mensaje: { type: string }
+            detalles: { type: array, items: { type: object, properties: { campo: { type: string }, mensaje: { type: string } } } }
+    Login:
+      type: object
+      required: [usuario, contrasena]
+      properties:
+        usuario: { type: string, maxLength: 50 }
+        contrasena: { type: string, format: password }
+    UsuarioSesion:
+      type: object
+      properties:
+        id: { type: integer }
+        usuario: { type: string }
+        nombre_completo: { type: string }
+        correo: { type: [string, 'null'] }
+        roles: { type: array, items: { type: string } }
+        permisos: { type: array, items: { type: string }, example: ['incidente:leer_todos', 'incidente:crear'] }
+    Usuario:
+      type: object
+      properties:
+        id: { type: integer }
+        usuario: { type: string }
+        nombre_completo: { type: string }
+        correo: { type: [string, 'null'] }
+        activo: { type: boolean }
+        roles: { type: array, items: { type: string } }
+        fecha_alta: { type: string, format: date-time }
+        ultimo_acceso: { type: [string, 'null'], format: date-time }
+    UsuarioNuevo:
+      type: object
+      required: [usuario, nombre_completo, contrasena, roles]
+      properties:
+        usuario: { type: string, pattern: '^[a-z0-9._-]+$', minLength: 3, maxLength: 50 }
+        nombre_completo: { type: string, maxLength: 150 }
+        correo: { type: [string, 'null'], format: email }
+        contrasena: { type: string, minLength: 10 }
+        roles: { type: array, minItems: 1, items: { type: string, enum: [administrador, gestor, analista, consultor] } }
+    Catalogo:
+      type: object
+      properties:
+        id: { type: integer }
+        nombre: { type: string }
+        descripcion: { type: [string, 'null'] }
+        orden: { type: integer }
+    Ref:
+      type: object
+      properties: { id: { type: integer }, nombre: { type: string } }
+    RefUsuario:
+      type: object
+      properties: { id: { type: integer }, usuario: { type: string }, nombre_completo: { type: string } }
+    Conteo:
+      type: object
+      properties: { nombre: { type: string }, orden: { type: integer }, total: { type: integer } }
+    Paginacion:
+      type: object
+      properties:
+        pagina: { type: integer }
+        por_pagina: { type: integer }
+        total: { type: integer }
+        paginas: { type: integer }
+    IncidenteNuevo:
+      type: object
+      required: [titulo, descripcion, categoria_id, tipo_id, severidad_id, prioridad_id, responsable_id]
+      properties:
+        titulo: { type: string, maxLength: 200, example: Ransomware en servidor de archivos }
+        descripcion: { type: string, maxLength: 5000, example: Archivos cifrados con extensión .lock y nota de rescate. }
+        categoria_id: { type: integer, example: 2 }
+        tipo_id: { type: integer, example: 4 }
+        severidad_id: { type: integer, example: 4 }
+        prioridad_id: { type: integer, example: 3 }
+        responsable_id: { type: integer, description: 'RN-01: obligatorio', example: 3 }
+        sistema_afectado: { type: [string, 'null'], maxLength: 150, example: FS-01 }
+    IncidenteCambios:
+      type: object
+      required: [version]
+      properties:
+        version: { type: string, description: Valor `version` recibido en la última lectura }
+        titulo: { type: string, maxLength: 200 }
+        descripcion: { type: string, maxLength: 5000 }
+        categoria_id: { type: integer }
+        tipo_id: { type: integer }
+        severidad_id: { type: integer }
+        prioridad_id: { type: integer }
+        sistema_afectado: { type: [string, 'null'], maxLength: 150 }
+    CambioEstado:
+      type: object
+      required: [version, estado]
+      properties:
+        version: { type: string }
+        estado: { type: string, enum: [registrado, asignado, en investigación, resuelto, cerrado] }
+        observacion: { type: [string, 'null'], maxLength: 1000 }
+        justificacion: { type: [string, 'null'], maxLength: 2000, description: 'Obligatoria para reabrir (RN-10)' }
+    IncidenteResumen:
+      type: object
+      properties:
+        id: { type: integer }
+        codigo: { type: string, example: INC-000001 }
+        titulo: { type: string }
+        sistema_afectado: { type: [string, 'null'] }
+        fecha_registro: { type: string, format: date-time }
+        fecha_resolucion: { type: [string, 'null'], format: date-time }
+        fecha_cierre: { type: [string, 'null'], format: date-time }
+        fecha_actualizacion: { type: string, format: date-time }
+        version: { type: string }
+        categoria: { $ref: '#/components/schemas/Ref' }
+        tipo: { $ref: '#/components/schemas/Ref' }
+        severidad: { $ref: '#/components/schemas/Ref' }
+        prioridad: { $ref: '#/components/schemas/Ref' }
+        estado: { $ref: '#/components/schemas/Ref' }
+        reportante: { $ref: '#/components/schemas/RefUsuario' }
+        responsable: { oneOf: [{ $ref: '#/components/schemas/RefUsuario' }, { type: 'null' }] }
+    IncidenteDetalle:
+      allOf:
+        - $ref: '#/components/schemas/IncidenteResumen'
+        - type: object
+          properties:
+            descripcion: { type: string }
+            transiciones_permitidas: { type: array, items: { type: string } }
+            historial:
+              type: array
+              items:
+                type: object
+                properties:
+                  fecha: { type: string, format: date-time }
+                  estado_anterior: { type: [string, 'null'] }
+                  estado_nuevo: { type: string }
+                  observacion: { type: [string, 'null'] }
+                  usuario: { $ref: '#/components/schemas/RefUsuario' }
+            acciones:
+              type: array
+              items:
+                type: object
+                properties: { fecha: { type: string }, descripcion: { type: string }, resultado: { type: [string, 'null'] }, usuario: { $ref: '#/components/schemas/RefUsuario' } }
+            comentarios:
+              type: array
+              items:
+                type: object
+                properties: { fecha: { type: string }, texto: { type: string }, usuario: { $ref: '#/components/schemas/RefUsuario' } }
+            evidencias:
+              type: array
+              items:
+                type: object
+                properties: { id: { type: integer }, nombre_archivo: { type: string }, hash_integridad: { type: string, pattern: '^[0-9a-f]{64}$' }, fecha_carga: { type: string } }
+            responsables:
+              type: array
+              description: Historial de asignaciones
+              items:
+                type: object
+                properties: { fecha_asignacion: { type: string }, fecha_desasignacion: { type: [string, 'null'] }, usuario: { $ref: '#/components/schemas/RefUsuario' } }

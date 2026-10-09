@@ -1,0 +1,35 @@
+# ------------------------------------------------------------------
+# Lista blanca: el repositorio publica SOLO el código fuente de
+#   - la base de datos  (proyecto/05_base_datos/13_sql)
+#   - la API            (proyecto/06_codigo/api)
+#   - el frontend       (proyecto/07_landing)
+# más .env.example (plantilla de configuración, sin valores).
+# Se conserva la estructura de carpetas porque la API resuelve las
+# rutas a los scripts SQL y al .env de forma relativa.
+# ------------------------------------------------------------------
+
+# 1) Ignorar todo lo de la raíz…
+/*
+# …excepto lo necesario para ejecutar
+!/.gitignore
+!/.env.example
+!/proyecto/
+
+# 2) Dentro de proyecto/, solo base de datos, API y frontend
+/proyecto/*
+!/proyecto/05_base_datos/
+/proyecto/05_base_datos/*
+!/proyecto/05_base_datos/13_sql/
+!/proyecto/06_codigo/
+/proyecto/06_codigo/*
+!/proyecto/06_codigo/api/
+!/proyecto/07_landing/
+
+# 3) Nunca versionar credenciales, dependencias ni artefactos generados
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+data/
+*.log

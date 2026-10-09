@@ -1,0 +1,228 @@
+{
+  "fecha": "2026-10-08T05:18:40.184Z",
+  "pantallas": [
+    {
+      "nombre": "landing",
+      "ancho": 1440,
+      "axe": [],
+      "desborde": 0,
+      "pequenos": [
+        "a \"documentada\""
+      ]
+    },
+    {
+      "nombre": "landing",
+      "ancho": 390,
+      "axe": [],
+      "desborde": 0,
+      "pequenos": [
+        "a \"documentada\""
+      ]
+    },
+    {
+      "nombre": "entrar",
+      "ancho": 1440,
+      "axe": [],
+      "desborde": 0,
+      "pequenos": []
+    },
+    {
+      "nombre": "entrar",
+      "ancho": 390,
+      "axe": [],
+      "desborde": 0,
+      "pequenos": []
+    },
+    {
+      "nombre": "panel-resumen",
+      "ancho": 1440,
+      "axe": [],
+      "desborde": 0,
+      "pequenos": []
+    },
+    {
+      "nombre": "panel-resumen",
+      "ancho": 390,
+      "axe": [],
+      "desborde": 0,
+      "pequenos": []
+    },
+    {
+      "nombre": "panel-tablero",
+      "ancho": 1440,
+      "axe": [],
+      "desborde": 0,
+      "pequenos": []
+    },
+    {
+      "nombre": "panel-tablero",
+      "ancho": 390,
+      "axe": [],
+      "desborde": 0,
+      "pequenos": []
+    },
+    {
+      "nombre": "panel-incidentes",
+      "ancho": 1440,
+      "axe": [],
+      "desborde": 0,
+      "pequenos": [
+        "a \"INC-000028\"",
+        "a \"INC-000027\"",
+        "a \"INC-000026\"",
+        "a \"INC-000025\"",
+        "a \"INC-000024\"",
+        "a \"INC-000023\"",
+        "a \"INC-000022\"",
+        "a \"INC-000021\"",
+        "a \"INC-000020\"",
+        "a \"INC-000019\"",
+        "a \"INC-000018\"",
+        "a \"INC-000017\"",
+        "a \"INC-000016\"",
+        "a \"INC-000015\"",
+        "a \"INC-000014\"",
+        "a \"INC-000013\""
+      ]
+    },
+    {
+      "nombre": "panel-incidentes",
+      "ancho": 390,
+      "axe": [],
+      "desborde": 0,
+      "pequenos": []
+    },
+    {
+      "nombre": "panel-nuevo",
+      "ancho": 1440,
+      "axe": [],
+      "desborde": 0,
+      "pequenos": [
+        "a \"Incidentes\""
+      ]
+    },
+    {
+      "nombre": "panel-nuevo",
+      "ancho": 390,
+      "axe": [],
+      "desborde": 0,
+      "pequenos": [
+        "a \"Incidentes\""
+      ]
+    },
+    {
+      "nombre": "panel-detalle",
+      "ancho": 1440,
+      "axe": [],
+      "desborde": 0,
+      "pequenos": [
+        "a \"Incidentes\""
+      ]
+    },
+    {
+      "nombre": "panel-detalle",
+      "ancho": 390,
+      "axe": [],
+      "desborde": 0,
+      "pequenos": [
+        "a \"Incidentes\""
+      ]
+    },
+    {
+      "nombre": "panel-analista",
+      "ancho": 1440,
+      "axe": [],
+      "desborde": 0,
+      "pequenos": []
+    },
+    {
+      "nombre": "panel-analista",
+      "ancho": 390,
+      "axe": [],
+      "desborde": 0,
+      "pequenos": []
+    },
+    {
+      "nombre": "panel-auditoria",
+      "ancho": 1440,
+      "axe": [],
+      "desborde": 0,
+      "pequenos": []
+    },
+    {
+      "nombre": "panel-auditoria",
+      "ancho": 390,
+      "axe": [],
+      "desborde": 0,
+      "pequenos": []
+    },
+    {
+      "nombre": "panel-usuarios",
+      "ancho": 1440,
+      "axe": [],
+      "desborde": 0,
+      "pequenos": [
+        "input \"\"",
+        "input \"\"",
+        "input \"\"",
+        "input \"\"",
+        "input \"\"",
+        "input \"\"",
+        "input \"\"",
+        "input \"\"",
+        "input \"\"",
+        "input \"\"",
+        "input \"\"",
+        "input \"\"",
+        "input \"\"",
+        "input \"\"",
+        "input \"\"",
+        "input \"\"",
+        "input \"\"",
+        "input \"\"",
+        "input \"\"",
+        "input \"\""
+      ]
+    },
+    {
+      "nombre": "panel-usuarios",
+      "ancho": 390,
+      "axe": [],
+      "desborde": 0,
+      "pequenos": [
+        "input \"\"",
+        "input \"\"",
+        "input \"\"",
+        "input \"\"",
+        "input \"\"",
+        "input \"\"",
+        "input \"\"",
+        "input \"\"",
+        "input \"\"",
+        "input \"\"",
+        "input \"\"",
+        "input \"\"",
+        "input \"\"",
+        "input \"\"",
+        "input \"\"",
+        "input \"\"",
+        "input \"\"",
+        "input \"\"",
+        "input \"\"",
+        "input \"\""
+      ]
+    }
+  ],
+  "flujo": [
+    "login gestor → /panel",
+    "RN-04 en UI: severidad crítica fija prioridad → alta",
+    "registrado INC-000029",
+    "→ asignado",
+    "→ en investigación",
+    "→ resuelto",
+    "RN-06 en UI: cierre sin acciones bloqueado → true",
+    "→ cerrado (con 1 acción)",
+    "historial con 5 líneas",
+    "analista2 navegación: Resumen, Tablero, Incidentes"
+  ]
+}

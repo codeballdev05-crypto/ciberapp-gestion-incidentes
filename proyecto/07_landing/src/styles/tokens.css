@@ -1,0 +1,58 @@
+/* Tokens del mundo "tablero de fichas" (docs/brief_landing.md, OWN-WORLD).
+   Contrastes verificados en docs/decisiones_visuales.md. */
+:root {
+  /* Superficies */
+  --bahia: #e3e4df;          /* fondo del tablero */
+  --bahia-honda: #d6d8d1;    /* ranura de bahía */
+  --papel: #fafaf7;          /* ficha */
+  --tinta: #1a1e26;          /* texto principal (no negro puro) */
+  --tinta-suave: #50565f;    /* texto secundario: 5.6:1 sobre bahía, 7.0:1 sobre papel */
+  --regla: #c4c7bf;          /* reglas de 1px */
+  --regla-fuerte: #9fa39a;
+
+  /* Acento único: acción */
+  --acento: #b93d0b;         /* blanco sobre acento 6.0:1 */
+  --acento-hondo: #93300a;
+  --foco: #b93d0b;
+
+  /* Severidad: canto de la ficha + chip (siempre acompañada de texto) */
+  /* Cantos con texto blanco ≥ 4.5:1 (auditoría axe, ver docs/auditorias/accesibilidad.md) */
+  --sev-baja: #4f6e4b;     --sev-baja-fondo: #dce7d8;    --sev-baja-tinta: #2f4a2c;
+  --sev-media: #8f6b16;    --sev-media-fondo: #f1e5c3;   --sev-media-tinta: #5a4313;
+  --sev-alta: #a94e28;     --sev-alta-fondo: #f6d9cb;    --sev-alta-tinta: #6e2a10;
+  --sev-critica: #8e1b1b;  --sev-critica-fondo: #8e1b1b; --sev-critica-tinta: #ffffff;
+
+  /* Estados de sistema */
+  --ok: #2f6b3a;
+  --error: #a3221b;
+  --error-fondo: #f8e1de;
+
+  /* Tipografía */
+  --f-rotulo: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  --f-texto: 'Barlow', 'Segoe UI', system-ui, sans-serif;
+  --f-dato: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+
+  --t-xs: 0.8125rem;
+  --t-sm: 0.875rem;
+  --t-base: 1rem;
+  --t-md: 1.125rem;
+  --t-lg: clamp(1.375rem, 1.1rem + 0.9vw, 1.75rem);
+  --t-xl: clamp(1.875rem, 1.3rem + 2vw, 2.75rem);
+  --t-display: clamp(2.25rem, 1.4rem + 3.2vw, 4rem);
+
+  /* Espaciado (escala de 4) */
+  --e-1: 0.25rem; --e-2: 0.5rem; --e-3: 0.75rem; --e-4: 1rem; --e-5: 1.5rem;
+  --e-6: 2rem; --e-7: 3rem; --e-8: 4.5rem; --e-9: 7rem;
+
+  --radio: 6px;
+  --radio-control: 4px;
+  --ancho: 1320px;
+
+  /* Movimiento (skill animate: curvas de su tabla, sin valores inventados).
+     UI bajo 300ms; el desplazamiento de fichas es explicativo (marketing) y puede ser mayor. */
+  --ease-salida: cubic-bezier(0.23, 1, 0.32, 1);   /* entrar/salir, hover, press */
+  --ease-mover: cubic-bezier(0.77, 0, 0.175, 1);   /* movimiento en pantalla */
+  --dur-rapida: 140ms;
+  --dur: 220ms;
+  --dur-ficha: 520ms;      /* desplazamiento de ficha entre bahías (momento autoral) */
+}
